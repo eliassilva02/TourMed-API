@@ -19,6 +19,7 @@ connect =  psycopg2.connect(host = "localhost", port ="5432", dbname="Anvisa", u
 cursor = connect.cursor()
 # # Insert Dataframe into SQL Server:
 try:
+    print("Inserindo os dados...")
     for index, row in df.iterrows():
             query = ("INSERT INTO precos_maximos VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)")
             values = (row['id_med'], row['registro'], row['ean'], row['nome'], row['principio_ativo'], row['classe'], row['categoria'], row['lista'], row['fk_cest'])

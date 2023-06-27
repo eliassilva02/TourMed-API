@@ -9,12 +9,14 @@ CORS(app, origins=['*'])
 @app.route('/med', methods=['POST'])
 def get_data():
     prod = request.json
-    produto = prod.get('produto')
+    tipo_req = prod.get('Requisição')
+    produto = prod.get('Produto')
 
-    if Anvisa(produto) != 'A consulta não retornou nenhum resultado.':
-        return Anvisa(produto)
+    if Anvisa(tipo_req, produto) != 'A consulta não retornou nenhum resultado.':
+        return Anvisa(tipo_req, produto)
     else:
         return Pesquisa(produto)
+
 
 if __name__ == '__main__':
     app.run(debug=True)
