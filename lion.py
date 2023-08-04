@@ -55,6 +55,10 @@ def Anvisa(tipo_req, med):
                 else:
                     ncm = qrpa[0][0]
 
+                # chamada para trazer grupo
+                idGrupo, descGrupo = FindGrupos(
+                    p_ativo=pa[0], ncm=ncm, cest=cest[0])
+
                 resultados[produto] = {
                     "EAN": ean[0],
                     "Categoria": categoria[0],
@@ -95,17 +99,23 @@ def Anvisa(tipo_req, med):
                             lista_smerp.append(lis_smerp)
                             ncm_smerp.append(ncmsmerp)
                             cest_smerp.append(cestsmerp)
+                            # chamada para trazer grupo
 
-                            return {
-                                "Registro": registro_smerp[0],
-                                "Categoria": categoria_smerp[0],
-                                "Lista": lista_smerp[0],
-                                "Nome": desc_smerp[0],
-                                "Principio Ativo": pa_smerp[0],
-                                "NCM": ncm_smerp[0],
-                                "CEST": cest_smerp[0]
+                    idGrupo, descGrupo = FindGrupos(
+                        p_ativo=p_a_smerp, ncm=ncm_smerp, cest=cest_smerp)
 
-                            }
+                    return {
+                        "Registro": registro_smerp[0],
+                        "Categoria": categoria_smerp[0],
+                        "Lista": lista_smerp[0],
+                        "Nome": desc_smerp[0],
+                        "Principio Ativo": pa_smerp[0],
+                        "NCM": ncm_smerp[0],
+                        "CEST": cest_smerp[0],
+                        'GRUPO': idGrupo,
+                        'DESC. GRUPO': descGrupo
+
+                    }
             else:
                 ean = []
                 desc = []
@@ -113,6 +123,9 @@ def Anvisa(tipo_req, med):
                 categoria = []
                 lista = []
                 cest = []
+                idGrupos = []
+                descGrupos = []
+                msg = []
 
                 for row in rowAnv:
                     for barras, nome, p_a, cat, lis, num in [(row[0], row[1], row[2], row[3], row[4], row[5])]:
@@ -132,6 +145,14 @@ def Anvisa(tipo_req, med):
                 else:
                     ncm = qrpa[0][0]
 
+                # chamada para trazer grupo
+                idGrupo, descGrupo, mensagem = FindGrupos(
+                    p_ativo=pa[0], ncm=ncm, cest=cest[0])
+
+                idGrupos.append(idGrupo)
+                descGrupos.append(descGrupo)
+                msg.append(mensagem)
+
                 resultados[produto] = {
                     "EAN": ean[0],
                     "Categoria": categoria[0],
@@ -139,7 +160,10 @@ def Anvisa(tipo_req, med):
                     "Nome": desc[0],
                     "Principio Ativo": pa[0],
                     "NCM": ncm,
-                    "CEST": cest[0]
+                    "CEST": cest[0],
+                    'GRUPO': idGrupos[0],
+                    'DESC. GRUPO': descGrupos[0],
+                    'Mensagem': msg[0]
                 }
 
         else:
@@ -249,6 +273,10 @@ def Pesquisa(med):
                         cest = None
                     else:
                         cest = qrcest[0][0]
+
+                    # chamada para trazer grupo
+                    idGrupo, descGrupo = FindGrupos(p_ativo, ncm, cest)
+
                     try:
                         cur.execute("INSERT INTO smerp_meds VALUES (%s, %s, %s, %s, %s, %s, %s);",
                                     (registro, nome, p_ativo, categoria, lista, ncm, cest))
@@ -261,7 +289,9 @@ def Pesquisa(med):
                             'Categoria': '%s ou %s' % (categoria, cat_),
                             'Lista': '%s ou %s' % (lista, lista_),
                             'NCM': ncm,
-                            'CEST': cest
+                            'CEST': cest,
+                            'GRUPO': idGrupo,
+                            'DESC. GRUPO': descGrupo
                         })
 
                     return jsonify({
@@ -271,8 +301,69 @@ def Pesquisa(med):
                         'Categoria': '%s ou %s' % (categoria, cat_),
                         'Lista': '%s ou %s' % (lista, lista_),
                         'NCM': ncm,
-                        'CEST': cest
+                        'CEST': cest,
+                        'GRUPO': idGrupo,
+                        'DESC. GRUPO': descGrupo
                     })
 
                 except NoSuchElementException:
                     return 'Item não encontrado'
+
+
+def FindGrupos(p_ativo, ncm, cest):
+    p_ativo = p_ativo.upper()
+    conn = psycopg2.connect(
+        host="localhost",
+        database="Anvisa",
+        user="postgres",
+        password="BateraDeus"
+    )
+
+    # Criando um cursor
+    cur = conn.cursor()
+    # Executando a consulta NCM
+    if ncm == '' or cest == '':
+        idd = 'Grupo Inexistente'
+        desc = 'Grupo Inexistente'
+        mensagem = 'Alguns parametros estão nulos'
+
+    elif ',' in p_ativo:
+        idd = 'Grupo Inexistente'
+        desc = 'Grupo Inexistente'
+        mensagem = 'Existe mais de um principio ativo'
+
+    # PESQUISA POR GRUPOS ESPECIFICOS (CESTA BASICA) E DEFINE A VARIAVEL TIPO POR ESP Q É ESPECÍFICO
+    else:
+        cur.execute(
+            f"SELECT idmed, description_grupo FROM public.gruposmed WHERE gruposmed.description_grupo LIKE '%{p_ativo}%' AND gruposmed.ncm_grupo = {ncm} AND gruposmed.cest_grupo = '{cest}'")
+        qrpa = cur.fetchall()
+        tipo = 'esp'
+
+    # PESQUISA POR GRUPOS GERAIS
+        if len(qrpa) == 0:
+            cur.execute(
+                f"SELECT idmed, description_grupo FROM public.gruposmed WHERE gruposmed.description_grupo LIKE 'MEDICAMENTO%' AND gruposmed.ncm_grupo = {ncm} AND gruposmed.cest_grupo = '{cest}' AND gruposmed.description_grupo NOT LIKE '%(%' AND gruposmed.description_grupo NOT LIKE '%CONTENDO%' AND gruposmed.description_grupo NOT LIKE '%SOMENTE%'")
+            qrpa = cur.fetchall()
+            tipo = 'geral'
+
+            if len(qrpa) == 0:
+                idd = 'Grupo Inexistente'
+                desc = 'Grupo Inexistente'
+                mensagem = 'Não foram encontrados parametros suficientes'
+        idd = []
+        desc = []
+        for i in qrpa:
+            if tipo == 'esp':
+                idd = str(i[0])
+                desc = i[1]
+                mensagem = 'OK'
+
+            elif tipo == 'geral':
+                idd = str(i[0])
+                desc = i[1]
+                mensagem = 'OK'
+
+    return idd, desc, mensagem
+
+
+print(Anvisa(tipo_req='Descrição', med=["ampicilina"]))
